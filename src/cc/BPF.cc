@@ -30,6 +30,7 @@
 #include "bpf_module.h"
 #include "libbpf.h"
 #include "perf_reader.h"
+#include "common.h"
 #include "usdt.h"
 
 #include "BPF.h"
@@ -297,11 +298,12 @@ StatusTuple BPF::attach_perf_event(uint32_t ev_type, uint32_t ev_config,
   TRY2(load_func(probe_func, BPF_PROG_TYPE_PERF_EVENT, probe_fd));
 
   auto fds = new std::map<int, int>();
-  int cpu_st = 0;
-  int cpu_en = sysconf(_SC_NPROCESSORS_ONLN) - 1;
+  std::vector<int> cpus;
   if (cpu >= 0)
-    cpu_st = cpu_en = cpu;
-  for (int i = cpu_st; i <= cpu_en; i++) {
+    cpus.push_back(cpu);
+  else
+    cpus = get_online_cpus();
+  for (int i: cpus) {
     int fd = bpf_attach_perf_event(probe_fd, ev_type, ev_config, sample_period,
                                    sample_freq, pid, i, group_fd);
     if (fd < 0) {
@@ -462,7 +464,7 @@ StatusTuple BPF::check_binary_symbol(const std::string& binary_path,
                                      const std::string& symbol,
                                      uint64_t symbol_addr, bcc_symbol* output) {
   int res = bcc_resolve_symname(binary_path.c_str(), symbol.c_str(),
-                                symbol_addr, output);
+                                symbol_addr, 0, output);
   if (res < 0)
     return StatusTuple(
         -1, "Unable to find offset for binary %s symbol %s address %lx",
